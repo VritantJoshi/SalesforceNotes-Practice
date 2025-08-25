@@ -1,0 +1,67 @@
+MODAL POP-UP HELPER:
+
+({
+    // 🔹 Main Save Logic
+    saveContactHelper : function(component) {
+        let newCon = component.get("v.newContact");
+        let accountId = component.get("v.recordId");
+
+        // Validation check
+        // if($A.util.isEmpty(newCon.LastName))	 also works as a condition.
+        if (!newCon.LastName || newCon.LastName.trim() === "") {
+            component.set("v.errorMessage", "Last Name is required.");
+            return;
+        }
+
+        // Attach Account Id
+        newCon.AccountId = accountId;
+
+        // Call Apex
+        let action = component.get("c.createContact");
+        action.setParams({ con: newCon });
+
+        let self = this; // ✅ store helper context
+
+        action.setCallback(this, function(response) {
+            let state = response.getState();
+
+            if (state === "SUCCESS") {
+                // ✅ Use helper's showToast method safely
+                this.showToast("Success", "Contact created successfully!", "success");
+                
+
+                // Reset and close modal
+                component.set("v.isOpen", false);
+                component.set("v.newContact", { 'sobjectType': 'Contact' });
+                component.set("v.errorMessage", "");
+            } else {
+                let errors = response.getError();
+                let message = "Error saving contact.";
+                if (errors && errors[0] && errors[0].message) {
+                    message = errors[0].message;
+                }
+                component.set("v.errorMessage", message);
+            }
+        });
+
+        $A.enqueueAction(action);
+    },
+
+    showToast : function(title, message, type) {
+        console.log("🔔 Preparing toast →", { title, message, type });
+
+        let toastEvent = $A.get("e.force:showToast");
+        if (toastEvent) {
+            toastEvent.setParams({
+                "title": title,
+                "message": message,
+                "type": type || "info"
+            });
+            console.log("✅ Toast fired →", { title, message, type });
+            toastEvent.fire();
+        } else {
+            console.warn("⚠️ force:showToast not supported → using alert()");
+            alert(title + ": " + message);
+        }
+    }
+})
