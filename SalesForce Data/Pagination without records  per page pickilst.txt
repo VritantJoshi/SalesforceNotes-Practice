@@ -1,0 +1,171 @@
+<aura:component controller="PaginationController" access="global">
+
+    <!-- Attributes -->
+    <aura:attribute name="contacts"     type="Contact[]"/>
+    <aura:attribute name="columns"      type="List"/>
+    <aura:attribute name="pageNumber"   type="Integer" default="1"/>
+    <aura:attribute name="pageSize"     type="Integer" default="5"/>
+    <aura:attribute name="totalRecords" type="Integer"/>
+    <aura:attribute name="totalPages"   type="Integer"/>
+    <aura:attribute name="pageList"     type="Integer[]" />
+
+    <aura:handler name="init" value="{! this }" action="{! c.loadData }"/>
+
+    <!-- Records Table -->
+    <lightning:datatable data="{! v.contacts }"
+                         keyField="Id"
+                         columns="{! v.columns }"/>
+
+    <!-- Pagination Buttons -->
+    <div class="slds-m-top_medium">
+        <lightning:button label="Previous"
+                          onclick="{!c.prevPage}"
+                          disabled="{! v.pageNumber == 1 }"/>
+
+        <aura:iteration items="{! v.pageList }" var="p">
+            <lightning:button
+                label="{! p }"
+                variant="{! p == v.pageNumber ? 'brand' : 'neutral' }"
+                onclick="{! c.gotoPage }">
+                <aura:set attribute="value" value="{! p }"/>
+            </lightning:button>
+        </aura:iteration>
+
+        <lightning:button label="Next"
+                          onclick="{!c.nextPage}"
+                          disabled="{! v.pageNumber == v.totalPages }"/>
+    </div>
+</aura:component>
+
+
+
+
+
+
+
+
+
+
+
+
+
+({
+    loadData : function(component, event, helper) {
+        // Set up base column config
+        component.set("v.columns", [
+            { label: "First Name", fieldName: "FirstName", type: "text" },
+            { label: "Last Name",  fieldName: "LastName",  type: "text" },
+            { label: "Email",      fieldName: "Email",     type: "email" },
+            { label: "Phone",      fieldName: "Phone",     type: "phone" }
+        ]);
+
+        helper.loadContacts(component);
+    },
+
+    prevPage : function(component, event, helper){
+        var currentPage = component.get("v.pageNumber");
+        if(currentPage > 1) {
+            component.set("v.pageNumber", currentPage - 1);
+            helper.loadContacts(component);
+        }
+    },
+
+    nextPage : function(component, event, helper){
+        var currentPage = component.get("v.pageNumber");
+        var totalPages  = component.get("v.totalPages");
+        if(currentPage < totalPages) {
+            component.set("v.pageNumber", currentPage + 1);
+            helper.loadContacts(component);
+        }
+    },
+
+    gotoPage : function(component, event, helper){
+        var target = parseInt(event.getSource().get("v.label"), 10);
+        component.set("v.pageNumber", target);
+        helper.loadContacts(component);
+    }
+})
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+public with sharing class PaginationController {
+
+    // Returns one page of contacts
+    @AuraEnabled(cacheable=true)
+    public static List<Contact> getContacts(Integer pageNumber, Integer pageSize) {
+        Integer offsetSize = (pageNumber - 1) * pageSize;
+
+        return [
+            SELECT Id, FirstName, LastName, Email, Phone FROM Contact ORDER BY FirstName LIMIT :pageSize OFFSET :offsetSize
+        ];
+    }
+
+    // Returns total number of records (for page links)
+    @AuraEnabled(cacheable=true)
+    public static Integer getTotalContacts(){
+        return [SELECT COUNT() FROM Contact];
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+({
+    loadContacts : function (component) {
+        var pageNumber = component.get("v.pageNumber");
+        var pageSize   = component.get("v.pageSize");
+
+        // first, load total record count
+        var countAction = component.get("c.getTotalContacts");
+        countAction.setCallback(this, function(res){
+            var total = res.getReturnValue();
+            component.set("v.totalRecords", total);
+
+            // build page list
+            var totalPages = Math.ceil(total / pageSize);
+            component.set("v.totalPages", totalPages);
+
+            var pages = [];
+            for (let i = 1; i <= totalPages; i++) {
+                pages.push(i);
+            }
+            component.set("v.pageList", pages);
+        });
+        $A.enqueueAction(countAction);
+
+        // then load the records for the current page
+        var dataAction = component.get("c.getContacts");
+        dataAction.setParams({
+            pageNumber : pageNumber,
+            pageSize   : pageSize
+        });
+        dataAction.setCallback(this, function(res){
+            component.set("v.contacts", res.getReturnValue());
+        });
+        $A.enqueueAction(dataAction);
+    }
+})
